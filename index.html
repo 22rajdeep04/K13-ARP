@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K13-ARP</title>
+<style>
+  :root {
+    --bg: #f4f6f7; --panel: #ffffff; --ink: #14212b; --muted: #5b6b77; --line: #d5dde2;
+    --res: #b3361f; --sen: #1f6f78; --focus: #0b57d0;
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11181d; --panel: #18222a; --ink: #e6edf1; --muted: #93a4b0; --line: #2c3a45; --res: #ef7a63; --sen: #5ec0c9; --focus: #8ab4f8; color-scheme: dark; }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { font: 600 2rem/1.15 Charter, Georgia, serif; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 28px; max-width: 56ch; }
+  form { display: flex; gap: 10px; }
+  input[type="text"] { flex: 1; min-width: 0; padding: 12px 14px; font: inherit; font-size: 1.1rem;
+          color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  button { padding: 12px 20px; font: inherit; font-weight: 600; color: #fff; background: var(--sen);
+           border: 0; border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: wait; }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  #status { color: var(--muted); margin: 10px 0 0; min-height: 1.5em; }
+  #err { color: var(--res); margin: 14px 0 0; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+            padding: 20px; margin-top: 18px; }
+  section h2 { font: 600 1.15rem/1.2 Charter, Georgia, serif; margin: 0 0 12px; }
+  .big { font-size: 1.9rem; font-weight: 700; margin: 0; }
+  .big.Resistant { color: var(--res); } .big.Sensitive { color: var(--sen); }
+  .track { position: relative; height: 10px; background: var(--line); border-radius: 5px; margin: 22px 0 6px; }
+  .tick { position: absolute; top: -6px; width: 2px; height: 22px; background: var(--ink); }
+  .marker { position: absolute; top: -5px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%;
+            border: 3px solid var(--panel); }
+  .marker.Resistant { background: var(--res); } .marker.Sensitive { background: var(--sen); }
+  .scale { display: flex; justify-content: space-between; color: var(--muted); font-size: .85rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin: 12px 0 0; }
+  dt { color: var(--muted); } dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .note { color: var(--muted); font-size: .92rem; margin: 10px 0 0; }
+  .warn { color: var(--res); font-weight: 600; }
+  .cite p { margin: 0 0 10px; }
+  .cite a { color: var(--focus); }
+  footer { color: var(--muted); font-size: .88rem; margin-top: 28px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>K13-Artemisinin Resistance Predictor</h1>
+  <p class="sub">Enter a single substitution in <i>Pf</i>Kelch13 to check its reported resistance profile or, if it has not been reported, the model's prediction. K13-ARP runs entirely on the browser, and nothing is uploaded to prevent privacy breaches.</p>
+
+  <form id="f">
+    <input id="mut" type="text" placeholder="e.g. C580Y" autocomplete="off" spellcheck="false" aria-label="Mutation" disabled>
+    <button id="go" disabled>Predict</button>
+  </form>
+  <p id="status" role="status">Loading Python runtime (This may take up to 30 seconds)</p>
+  <p id="err" role="alert" hidden></p>
+
+  <div id="out" hidden>
+    <section id="known" hidden>
+      <h2>Reported resistance profile</h2>
+      <p class="big" id="kPheno"></p>
+      <p class="note" id="kPc"></p>
+      <p class="note" id="kSrc"></p>
+    </section>
+
+    <div id="modelBlocks">
+      <p class="note">Model prediction, not a reported experimental result.</p>
+      <section>
+        <h2>Resistance class</h2>
+        <p class="big" id="label"></p>
+        <div class="track" aria-hidden="true"><div class="tick" id="tick"></div><div class="marker" id="marker"></div></div>
+        <div class="scale"><span>0</span><span id="thrLabel"></span><span>1</span></div>
+        <dl><dt>P(Resistant)</dt><dd id="prob"></dd></dl>
+        <p class="note warn" id="lowm" hidden>Probability is close to the threshold, so treat this as a low-confidence call.</p>
+      </section>
+
+      <section>
+        <h2>Clearance half-life (PC&frac12;)</h2>
+        <p class="big" id="hl"></p>
+        <p class="note" id="pi"></p>
+        <p class="note">The regression has weak predictive power (LOOCV Q&sup2; about 0.1). Treat it as a rough estimate.</p>
+      </section>
+
+      <section>
+        <h2>Features (deviation from WT)</h2>
+        <dl id="feats"></dl>
+      </section>
+    </div>
+  </div>
+
+  <section class="cite" aria-labelledby="citeh">
+    <h2 id="citeh">How to cite</h2>
+    <p> If K13-Artemisinin Resistance Predictor was useful in your study, please consider citing the paper and the version of the tool.</p>
+    <p id="citePaper"></p>
+    <p id="citeSoft"></p>
+    <button id="copyCite">Copy citation</button>
+  </section>
+
+  <footer id="foot">Note: This tool may help in triaging potential resistance in mutant strains of K13 and must not be used as a deterministic diagnostic tool.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+const FILES = ["main.py", "mpp.py", "dipeptide.csv", "classifier_config.json", "regression_config.json", "resistance_lookup.csv"];
+
+const CITE = {
+  title: "Leave-One-Out-Cross-Validation Based Machine Learning Algorithms for Efficient, Scalable, and Robust, Prediction of Artemisinin Resistance in Plasmodium falciparum Protein Kelch13 Mutant Strains",
+  journal: "Malaria Journal",
+  year: "2026",
+  doi: "[bioRxiv DOI]",
+  version: "[v1.0]",
+  softwareDoi: "[10.5281/zenodo.xxxxxxx]"
+};
+
+const GLUE = `
+import json, sys
+sys.path.insert(0, "/home/pyodide")
+import main
+_clf = main.load_config("classifier_config.json")
+_reg = main.load_config("regression_config.json")
+_known = main.load_known()
+def run(text):
+    name = text.strip().upper()
+    try:
+        main.parse_mutation(name)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
+    out = {"mutation": name, "known": _known.get(name), "threshold": _clf["threshold"],
+           "clf": _clf.get("dataset", "n/a"), "reg": _reg.get("dataset", "n/a")}
+    if out["known"] is None:
+        try:
+            f = main.compute_features(name)
+        except (ValueError, KeyError) as e:
+            return json.dumps({"error": str(e)})
+        label, p = main.predict_resistance(_clf, f)
+        hl, iv = main.predict_half_life(_reg, f)
+        out.update({"features": f, "label": label, "p": p,
+                    "low": abs(p - _clf["threshold"]) < main.LOW_MARGIN, "hl": hl, "iv": iv})
+    return json.dumps(out)
+`;
+const TL = {ALA:"A",ARG:"R",ASN:"N",ASP:"D",CYS:"C",GLN:"Q",GLU:"E",GLY:"G",HIS:"H",ILE:"I",LEU:"L",LYS:"K",
+            MET:"M",PHE:"F",PRO:"P",SER:"S",THR:"T",TRP:"W",TYR:"Y",VAL:"V"};
+const $ = id => document.getElementById(id);
+let run;
+
+async function init() {
+  try {
+    const py = await loadPyodide();
+    const texts = await Promise.all(FILES.map(async f => {
+      const r = await fetch(f);
+      if (!r.ok) throw new Error("Missing file: " + f);
+      return r.text();
+    }));
+    FILES.forEach((f, i) => py.FS.writeFile("/home/pyodide/" + f, texts[i]));
+    const src = texts[0] + "\n" + texts[1];
+    const pk = ["pandas", "numpy", "scipy"].filter(m => new RegExp("^\\s*(import|from)\\s+" + m, "m").test(src));
+    if (/^\s*(import|from)\s+Bio\b/m.test(src)) pk.push("biopython");
+    if (pk.length) await py.loadPackage(pk);
+    py.runPython(GLUE);
+    run = py.globals.get("run");
+    $("status").textContent = "Ready.";
+    $("mut").disabled = false; $("go").disabled = false; $("mut").focus();
+  } catch (e) {
+    $("status").textContent = "";
+    showErr("Could not start the predictor: " + e.message);
+  }
+}
+
+function showErr(msg) { $("err").textContent = msg; $("err").hidden = false; $("out").hidden = true; }
+
+function normalise(tok) {
+  const t = tok.trim().replace(/^p\./i, "");
+  const m = t.match(/^([A-Za-z]{3})(\d+)([A-Za-z]{3})$/);
+  if (m && TL[m[1].toUpperCase()] && TL[m[3].toUpperCase()])
+    return TL[m[1].toUpperCase()] + m[2] + TL[m[3].toUpperCase()];
+  return t.toUpperCase();
+}
+
+function render(r) {
+  $("err").hidden = true;
+  const k = r.known;
+  $("known").hidden = !k;
+  if (k) {
+    $("kPheno").textContent = k.resistance;
+    $("kPc").textContent = k.pc === null ? "PC1/2: not reported" : "PC1/2: " + k.pc;
+    $("kSrc").textContent = k.source ? "Reference: " + k.source : "";
+  }
+  const hasModel = r.label !== undefined;
+  $("modelBlocks").hidden = !hasModel;
+  if (hasModel) {
+    $("label").textContent = r.label; $("label").className = "big " + r.label;
+    const pct = Math.min(100, Math.max(0, r.p * 100));
+    $("marker").style.left = pct + "%"; $("marker").className = "marker " + r.label;
+    $("tick").style.left = (r.threshold * 100) + "%";
+    $("thrLabel").textContent = "threshold " + r.threshold;
+    $("prob").textContent = r.p.toFixed(3);
+    $("lowm").hidden = !r.low;
+    $("hl").textContent = r.hl.toFixed(2);
+    $("pi").textContent = r.iv ? "95% prediction interval: " + r.iv[0].toFixed(2) + " to " + r.iv[1].toFixed(2) : "";
+    const dl = $("feats"); dl.textContent = "";
+    for (const [n, v] of Object.entries(r.features)) {
+      const dt = document.createElement("dt"), dd = document.createElement("dd");
+      dt.textContent = n; dd.textContent = v.toFixed(3); dl.append(dt, dd);
+    }
+  }
+  $("out").hidden = false;}
+
+function doiLink(d) {
+  if (!/^10\./.test(d)) return document.createTextNode(d);
+  const a = document.createElement("a");
+  a.href = "https://doi.org/" + d; a.textContent = "https://doi.org/" + d;
+  return a;
+}
+function buildCitation() {
+  const authors = "Das R, Dutta S, Bhattacharjee S.";
+  $("citePaper").replaceChildren(document.createTextNode(
+    authors + " " + CITE.title + ". " + CITE.journal + ". " + CITE.year + ". doi: "), doiLink(CITE.doi));
+  $("citeSoft").replaceChildren(document.createTextNode(
+    "Web tool: K13-Artemisinin Resistance Predictor, version " + CITE.version + ". Archived release: "), doiLink(CITE.softwareDoi));
+}
+$("copyCite").addEventListener("click", async () => {
+  const text = $("citePaper").textContent + "\n" + $("citeSoft").textContent;
+  try { await navigator.clipboard.writeText(text); $("copyCite").textContent = "Copied"; }
+  catch (e) { $("copyCite").textContent = "Select the text above to copy"; }
+  setTimeout(() => { $("copyCite").textContent = "Copy citation"; }, 2500);
+});
+
+$("f").addEventListener("submit", e => {
+  e.preventDefault();
+  const text = $("mut").value;
+  if (!run || !text.trim()) return;
+  const r = JSON.parse(run(normalise(text)));
+  r.error ? showErr(r.error) : render(r);
+});
+buildCitation();
+init();
+</script>
+</body>
+</html>
