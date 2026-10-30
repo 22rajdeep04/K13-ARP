@@ -103,7 +103,7 @@ def compute_features(mutation):
     mutant_seq = build_mutant(resno, mut)
     return {
         "II": mean_window_deviation(KELCH_SEQ, mutant_seq, resno, instability_index),
-        "AI": mean_window_deviation(KELCH_SEQ, mutant_seq, resno, aliphatic_index),
+        "ALIN": mean_window_deviation(KELCH_SEQ, mutant_seq, resno, aliphatic_index),
         "BDE": bde_deviation(og, mut, resno),
     }
 
