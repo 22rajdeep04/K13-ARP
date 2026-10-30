@@ -4,7 +4,7 @@ Implemented code and data collected for the study: **"Leave-One-Out-Cross-Valida
 
 **Authors: Das, Rajdeep; Dutta, Smritikana; Bhattacharjee, Souvik**
 ## Overview
-Artemisinin (ART) and Artemisinin Combination Therapy (ACT) are the first line of defence against Malaria caused by __P. falciparum__, that are activated by Heme residues bound to an essential protein Kelch13 (K13). Recent surveys and studies have shown a high correlation between K13 Mutations and ART-Resistance. K13-ARP is a comprehensive tool that efficiently classifies such mutants for their degree of resistance. 
+Artemisinin (ART) and Artemisinin Combination Therapy (ACT) are the first line of defence against Malaria caused by _P. falciparum_, that are activated by Heme residues bound to an essential protein Kelch13 (K13). Recent surveys and studies have shown a high correlation between K13 Mutations and ART-Resistance. K13-ARP is a comprehensive tool that efficiently classifies such mutants for their degree of resistance. 
 This repository provides the code and data used to build K13-ARP, that runs a simple and interpretable Logistic Regression and Linear Regression to predit ART-R from the mutation name alone. The models run entirely on a set of ten physicochemical and structural descriptors alone.
 
 |**TASK**| **TARGET**| **MODEL**|
