@@ -1,0 +1,130 @@
+import warnings
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import LeaveOneOut
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, matthews_corrcoef, confusion_matrix, roc_auc_score
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+
+#load data
+df = pd.read_csv("k13_binary.csv")
+df.columns = [c.strip() for c in df.columns]
+df["Resistance"] = df["Resistance"].str.strip()
+df["label"] = (df["Resistance"] != "Sensitive").astype(int)
+
+
+core_features = ["II", "ALIN", "BDE"]
+X = df[core_features].values
+y = df["label"].values
+
+#lowered decision boundary
+DECISION_THRESHOLD = 0.4
+
+print(f"Samples: {len(y)}  |  Sensitive: {sum(y == 0)}  |  Resistant: {sum(y == 1)}")
+print(f"Core features: {core_features}\n")
+
+#LOOCV performance
+loo = LeaveOneOut()
+y_true_all, y_pred_all, y_prob_all = [], [], []
+
+#training and validation loop
+for train_idx, test_idx in loo.split(X):
+    X_train, X_test = X[train_idx], X[test_idx]
+    y_train, y_test = y[train_idx], y[test_idx]
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    clf = LogisticRegression(penalty="l2", class_weight="balanced", solver="liblinear", max_iter=5000)
+    clf.fit(X_train_scaled, y_train)
+
+    prob = clf.predict_proba(X_test_scaled)[0, 1]
+    pred = int(prob >= DECISION_THRESHOLD)
+
+    y_true_all.append(y_test[0])
+    y_pred_all.append(pred)
+    y_prob_all.append(prob)
+
+accuracy = accuracy_score(y_true_all, y_pred_all)
+mcc = matthews_corrcoef(y_true_all, y_pred_all)
+auc = roc_auc_score(y_true_all, y_prob_all)
+cm = confusion_matrix(y_true_all, y_pred_all)
+
+print("LOOCV performance")
+print(f"Accuracy: {accuracy:.3f}")
+print(f"MCC: {mcc:.3f}")
+print(f"AUC: {auc:.3f}")
+print("Confusion matrix:\n", cm)
+
+#VIF check
+scaler_vif = StandardScaler()
+X_scaled_vif = scaler_vif.fit_transform(X)
+X_vif_df = pd.DataFrame(X_scaled_vif, columns=core_features)
+
+vif_data = pd.DataFrame()
+vif_data["feature"] = core_features
+vif_data["VIF"] = [variance_inflation_factor(X_vif_df.values, i) for i in range(len(core_features))]
+
+print("\nVIF check")
+print(vif_data.to_string(index=False))
+
+
+#final model refit on entire dataset
+scaler_final = StandardScaler()
+X_scaled_final = scaler_final.fit_transform(X)
+
+final_model = LogisticRegression(penalty="l2", class_weight="balanced", solver="liblinear", max_iter=5000)
+final_model.fit(X_scaled_final, y)
+
+print("\n--- Final deployable model (refit on all 40 samples) ---")
+print(f"Features: {core_features}")
+print(f"Decision threshold: {DECISION_THRESHOLD}")
+import json
+
+#construct config.json for integration
+config = {
+    "features": core_features,
+    "mean": scaler_final.mean_.tolist(),
+    "scale": scaler_final.scale_.tolist(),
+    "coef": final_model.coef_.ravel().tolist(),
+    "intercept": float(final_model.intercept_[0]),
+    "threshold": DECISION_THRESHOLD,
+}
+with open("classifier_config.json", "w") as f:
+    json.dump(config, f, indent=2)
+print("Saved classifier_config.json")
+
+#coefficient extraction
+def get_coefficients():
+    coef_dict = {"intercept": final_model.intercept_[0]}
+    coef_dict.update(dict(zip(core_features, final_model.coef_.ravel())))
+    return coef_dict
+
+#usable prediction function
+def predict_resistance(feature_dict):
+    x_raw = np.array([[feature_dict[f] for f in core_features]])
+    x_scaled = scaler_final.transform(x_raw)
+
+    prob = final_model.predict_proba(x_scaled)[0, 1]
+    pred = int(prob >= DECISION_THRESHOLD)
+
+    label = "Resistant" if pred == 1 else "Sensitive"
+    return label, prob
+
+#integration and testing
+if __name__ == "__main__":
+    print("\nFinal model coefficients:")
+    for name, val in get_coefficients().items():
+        print(f"  {name}: {val:.4f}")
+    #sample prediction
+    sample_features = {"II": 78, "ALIN": 0, "BDE": 1.88}
+    label, prob = predict_resistance(sample_features)
+    print(f"\nSample prediction for features {sample_features}:")
+    print(f"Prediction: {label}")
+    print(f"Predicted P(Resistance): {prob:.3f}")
