@@ -17,15 +17,15 @@ Due to the small sample size (n=40), we applied the models using a LOOCV (Leave 
 ### Descriptors
 |**Feature**|**Description**|
 |:---:|:---:|
-|Propensity| |
-|Isoelectric Point||
-|GRAVY||
-|Aliphatic Index||
-|Instability Index||
-|Steric Hindrance||
-|Solvent Accessible Surface Area||
-|Hydrogen Bonds||
-|Bond Dissociation Energy||
-|Root Mean Square Deviation||
+|Propensity| Chou-Fasman's secondary structure prediction|
+|Isoelectric Point| pH at which a peptide has a neutral charge|
+|GRAVY| Quantifies Hyrdropathicity|
+|Aliphatic Index|Quantifies the aliphatic nature of the local environment|
+|Instability Index|Quantifies instability|
+|Steric Hindrance| Clashes in the Amino acid side chains|
+|Solvent Accessible Surface Area| Per residue surface area|
+|Hydrogen Bonds|No of hydrogen bonds in the total 3D structure|
+|Bond Dissociation Energy| Thermodynamic stability |
+|Root Mean Square Deviation| Structural deviation of mutants from WT|
 ## Contact
 Dr. Souvik Bhattacharjee, Special Centre for Molecular Medicine, Jawaharlal Nehru University, New Delhi, India- 110067 [souvik@jnu.ac.in]. Repository Maintainer: @22rajdeep04.
